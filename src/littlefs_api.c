@@ -8,7 +8,6 @@
 
 #include "esp_log.h"
 #include "esp_partition.h"
-#include "esp_vfs.h"
 #include "littlefs/lfs.h"
 #include "esp_littlefs.h"
 #include "littlefs_api.h"
@@ -55,4 +54,3 @@ int littlefs_api_sync(const struct lfs_config *c) {
     /* Unnecessary for esp-idf */
     return 0;
 }
-

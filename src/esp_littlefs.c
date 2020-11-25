@@ -1,6 +1,6 @@
 /**
  * @file esp_littlefs.c
- * @brief Maps LittleFS <-> ESP_VFS 
+ * @brief Maps LittleFS <-> ESP_VFS
  * @author Brian Pugh
  */
 
@@ -167,7 +167,7 @@ static void esp_littlefs_free_fds(esp_littlefs_t * efs) {
         free(efs->file);
         efs->file = next;
     }
-    free(efs->cache); 
+    free(efs->cache);
     efs->cache = 0;
     efs->cache_size = efs->fd_count = 0;
 }
@@ -268,7 +268,7 @@ esp_err_t esp_vfs_littlefs_register(const esp_vfs_littlefs_conf_t * conf)
 #if CONFIG_LITTLEFS_USE_MTIME
         .utime_p     = &vfs_littlefs_utime,
 #endif // CONFIG_LITTLEFS_USE_MTIME
-       
+
 #endif // CONFIG_VFS_SUPPORT_DIR
     };
 
@@ -335,7 +335,7 @@ esp_err_t esp_littlefs_format(const char* partition_label) {
         efs_free = true;
         const esp_vfs_littlefs_conf_t conf = {
                 /* base_name not necessary for initializing */
-                .dont_mount = true, 
+                .dont_mount = true,
                 .partition_label = partition_label,
         };
         err = esp_littlefs_init(&conf); /* Internally MIGHT call esp_littlefs_format */
@@ -393,7 +393,7 @@ esp_err_t esp_littlefs_format(const char* partition_label) {
         efs->cache = calloc(sizeof(*efs->cache), efs->cache_size);
     }
     ESP_LOGV(TAG, "Format Success!");
-    
+
     err = ESP_OK;
 
 exit:
@@ -499,7 +499,7 @@ static esp_err_t esp_littlefs_by_label(const char* label, int * index){
 
 /**
  * @brief Get the index of an unallocated LittleFS slot.
- * @param[out] index Indexd of free LittleFS slot 
+ * @param[out] index Indexd of free LittleFS slot
  * @return ESP_OK on success
  */
 static esp_err_t esp_littlefs_get_empty(int *index) {
@@ -560,7 +560,7 @@ static int esp_littlefs_flags_conv(int m) {
 }
 
 /**
- * @brief Initialize and mount littlefs 
+ * @brief Initialize and mount littlefs
  * @param[in] conf Filesystem Configuration
  * @return ESP_OK on success
  */
@@ -589,12 +589,16 @@ static esp_err_t esp_littlefs_init(const esp_vfs_littlefs_conf_t* conf)
         goto exit;
     }
 
-    /* Input and Environment Validation */
-    if (esp_littlefs_by_label(conf->partition_label, &index) == ESP_OK) {
-        ESP_LOGE(TAG, "Partition already used");
-        err = ESP_ERR_INVALID_STATE;
-        goto exit;
-    }
+    switch (conf->type) {
+        case ESP_VFS_LITTLEFS_TYPE_CUSTOM:
+            break;
+        case ESP_VFS_LITTLEFS_TYPE_FLASH:
+            /* Input and Environment Validation */
+            if (esp_littlefs_by_label(conf->flash_conf.partition_label, &index) == ESP_OK) {
+                ESP_LOGE(TAG, "Partition already used");
+                err = ESP_ERR_INVALID_STATE;
+                goto exit;
+            }
 
 	{
         uint32_t flash_page_size = g_rom_flashchip.page_size;
@@ -607,20 +611,24 @@ static esp_err_t esp_littlefs_init(const esp_vfs_littlefs_conf_t* conf)
         }
     }
 
-    if ( NULL == conf->partition_label ) {
-        ESP_LOGE(TAG, "Partition label must be provided.");
-        err = ESP_ERR_INVALID_ARG;
-        goto exit;
-    }
+            if ( NULL == conf->flash_conf.partition_label ) {
+                ESP_LOGE(TAG, "Partition label must be provided.");
+                err = ESP_ERR_INVALID_ARG;
+                goto exit;
+            }
 
-    partition = esp_partition_find_first(
-            ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY,
-            conf->partition_label);
+            partition = esp_partition_find_first(
+                    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY,
+                    conf->flash_conf.partition_label);
 
-    if (!partition) {
-        ESP_LOGE(TAG, "partition \"%s\" could not be found", conf->partition_label);
-        err = ESP_ERR_NOT_FOUND;
-        goto exit;
+            if (!partition) {
+                ESP_LOGE(TAG, "partition \"%s\" could not be found", conf->flash_conf.partition_label);
+                err = ESP_ERR_NOT_FOUND;
+                goto exit;
+            }
+            break;
+        case ESP_VFS_LITTLEFS_TYPE_SDCARD:
+            break;
     }
 
     /* Allocate Context */
@@ -644,7 +652,7 @@ static esp_err_t esp_littlefs_init(const esp_vfs_littlefs_conf_t* conf)
         // block device configuration
         efs->cfg.read_size = CONFIG_LITTLEFS_READ_SIZE;
         efs->cfg.prog_size = CONFIG_LITTLEFS_WRITE_SIZE;
-        efs->cfg.block_size = CONFIG_LITTLEFS_BLOCK_SIZE;; 
+        efs->cfg.block_size = CONFIG_LITTLEFS_BLOCK_SIZE;;
         efs->cfg.block_count = efs->partition->size / efs->cfg.block_size;
         efs->cfg.cache_size = CONFIG_LITTLEFS_CACHE_SIZE;
         efs->cfg.lookahead_size = CONFIG_LITTLEFS_LOOKAHEAD_SIZE;
@@ -733,18 +741,18 @@ static inline int sem_give(esp_littlefs_t *efs) {
 }
 
 
-/* We are using a double allocation system here, which an array and a linked list. 
+/* We are using a double allocation system here, which an array and a linked list.
    The array contains the pointer to the file descriptor (the index in the array is what's returned to the user).
    The linked list is used for file descriptors.
    This means that position of nodes in the list must stay consistent:
    - Allocation is obvious (append to the list from the head, and realloc the pointers array)
      There is still a O(N) search in the cache for a free position to store
    - Searching is a O(1) process (good)
-   - Deallocation is more tricky. That is, for example, 
+   - Deallocation is more tricky. That is, for example,
      if you need to remove node 5 in a 12 nodes list, you'll have to:
        1) Mark the 5th position as freed (if it's the last position of the array realloc smaller)
        2) Walk the list until finding the pointer to the node O(N) and scrub the node so the chained list stays consistent
-       3) Deallocate the node 
+       3) Deallocate the node
 */
 
 /**
@@ -792,13 +800,13 @@ static int esp_littlefs_allocate_fd(esp_littlefs_t *efs, vfs_littlefs_file_t ** 
     if (*file == NULL) {
         /* If it fails here, the file system might have a larger cache, but it's harmless, no need to reverse it */
         ESP_LOGE(TAG, "Unable to allocate FD");
-        return -1; 
+        return -1;
     }
 
     /* Starting from here, nothing can fail anymore */
 
 #ifndef CONFIG_LITTLEFS_USE_ONLY_HASH
-    /* The trick here is to avoid dual allocation so the path pointer 
+    /* The trick here is to avoid dual allocation so the path pointer
         should point to the next byte after it:
         file => [ lfs_file | # | next | path | free_space ]
                                             |  /\
@@ -806,7 +814,7 @@ static int esp_littlefs_allocate_fd(esp_littlefs_t *efs, vfs_littlefs_file_t ** 
     */
     (*file)->path = (char*)(*file) + sizeof(**file);
 #endif
- 
+
     /* Now find a free place in cache */
     for(i=0; i < efs->cache_size; i++) {
         if (efs->cache[i] == NULL) {
@@ -851,7 +859,7 @@ static int esp_littlefs_free_fd(esp_littlefs_t *efs, int fd){
             ESP_LOGE(TAG, "Inconsistent list");
             return -1;
         }
-        /* Transaction starts here and can't fail anymore */ 
+        /* Transaction starts here and can't fail anymore */
         head->next = file->next;
     }
     efs->cache[fd] = NULL;
@@ -900,7 +908,7 @@ static int esp_littlefs_free_fd(esp_littlefs_t *efs, int fd){
 /**
  * @brief Compute the 32bit DJB2 hash of the given string.
  * @param[in]   path the path to hash
- * @returns the hash for this path 
+ * @returns the hash for this path
  */
 static uint32_t compute_hash(const char * path) {
     uint32_t hash = 5381;
@@ -926,7 +934,7 @@ static int esp_littlefs_get_fd_by_name(esp_littlefs_t *efs, const char *path){
 
     for(uint16_t i=0, j=0; i < efs->cache_size && j < efs->fd_count; i++){
         if (efs->cache[i]) {
-            ++j; 
+            ++j;
 
             if (
                 efs->cache[i]->hash == hash  // Faster than strcmp
@@ -1257,7 +1265,7 @@ static off_t vfs_littlefs_lseek(void* ctx, int fd, off_t offset, int mode) {
         case SEEK_SET: whence = LFS_SEEK_SET; break;
         case SEEK_CUR: whence = LFS_SEEK_CUR; break;
         case SEEK_END: whence = LFS_SEEK_END; break;
-        default: 
+        default:
             ESP_LOGE(TAG, "Invalid mode");
             errno = EINVAL;
             return -1;
@@ -1350,7 +1358,7 @@ static int vfs_littlefs_fstat(void* ctx, int fd, struct stat * st) {
         return -1;
     }
 
-#if CONFIG_LITTLEFS_USE_MTIME  
+#if CONFIG_LITTLEFS_USE_MTIME
     st->st_mtime = vfs_littlefs_get_mtime(efs, file->path);
 #endif
 
@@ -1383,7 +1391,7 @@ static int vfs_littlefs_stat(void* ctx, const char * path, struct stat * st) {
                 path, esp_littlefs_errno(res), res);
         return -1;
     }
-#if CONFIG_LITTLEFS_USE_MTIME    
+#if CONFIG_LITTLEFS_USE_MTIME
     st->st_mtime = vfs_littlefs_get_mtime(efs, path);
 #endif
     sem_give(efs);
@@ -1511,7 +1519,7 @@ static DIR* vfs_littlefs_opendir(void* ctx, const char* name) {
     sem_give(efs);
     if (res < 0) {
         errno = lfs_errno_remap(res);
-#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH        
+#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH
         ESP_LOGV(TAG, "Failed to opendir \"%s\". Error %s (%d)",
                 dir->path, esp_littlefs_errno(res), res);
 #else
@@ -1538,7 +1546,7 @@ static int vfs_littlefs_closedir(void* ctx, DIR* pdir) {
     sem_give(efs);
     if (res < 0) {
         errno = lfs_errno_remap(res);
-#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH        
+#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH
         ESP_LOGV(TAG, "Failed to closedir \"%s\". Error %s (%d)",
                 dir->path, esp_littlefs_errno(res), res);
 #else
@@ -1577,7 +1585,7 @@ static int vfs_littlefs_readdir_r(void* ctx, DIR* pdir,
     sem_give(efs);
     if (res < 0) {
         errno = lfs_errno_remap(res);
-#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH 
+#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH
         ESP_LOGV(TAG, "Failed to readdir \"%s\". Error %s (%d)",
                 dir->path, esp_littlefs_errno(res), res);
 #else
@@ -1846,7 +1854,7 @@ static time_t vfs_littlefs_get_mtime(esp_littlefs_t *efs, const char *path)
             &t, sizeof(t));
     if( size < 0 ) {
         errno = lfs_errno_remap(size);
-#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH        
+#ifndef CONFIG_LITTLEFS_USE_ONLY_HASH
         ESP_LOGV(TAG, "Failed to get mtime attribute %s (%d)",
                 esp_littlefs_errno(size), size);
 #else
