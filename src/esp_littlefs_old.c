@@ -6,7 +6,6 @@
 
 //#define LOG_LOCAL_LEVEL 5
 
-#include "esp_littlefs_old.h"
 #include "littlefs/lfs.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
