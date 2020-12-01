@@ -2,8 +2,8 @@ LittleFS for ESP-IDF.
 
 # What is LittleFS?
 
-[LittleFS](https://github.com/ARMmbed/littlefs) is a small fail-safe filesystem 
-for microcontrollers. We ported LittleFS to esp-idf (specifically, the ESP32) 
+[LittleFS](https://github.com/littlefs-project/littlefs) is a small fail-safe filesystem
+for microcontrollers. We ported LittleFS to esp-idf (specifically, the ESP32)
 because SPIFFS was too slow, and FAT was too fragile.
 
 # How to Use
@@ -31,12 +31,8 @@ User @wreyford has kindly provided a [demo repo](https://github.com/wreyford/dem
 
 # Documentation
 
-See the official [ESP-IDF SPIFFS documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/spiffs.html), basically all the functionality is the 
+See the official [ESP-IDF SPIFFS documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/spiffs.html), basically all the functionality is the
 same; just replace `spiffs` with `littlefs` in all function calls.
-
-Also see the comments in `include/esp_littlefs.h`
-
-Slight differences between this configuration and SPIFFS's configuration is in the `esp_vfs_littlefs_conf_t`:
 
 1. `max_files` field doesn't exist since we removed the file limit, thanks to @X-Ryl669
 2. `partition_label` is not allowed to be `NULL`. You must specify the partition name from your partition table. This is because there isn't a define `littlefs` partition subtype in `esp-idf`. The subtype doesn't matter.
@@ -56,7 +52,7 @@ For example, if your partition table looks like:
 nvs,      data, nvs,      0x9000,  0x6000,
 phy_init, data, phy,      0xf000,  0x1000,
 factory,  app,  factory,  0x10000, 1M,
-graphics,  data, spiffs,         ,  0xF0000, 
+graphics,  data, spiffs,         ,  0xF0000,
 ```
 
 and your project has a folder called `device_graphics`, your call should be:
@@ -65,13 +61,56 @@ and your project has a folder called `device_graphics`, your call should be:
 littlefs_create_partition_image(graphics device_graphics)
 ```
 
-
-
 # Performance
+=======
+```c
+esp_littlefs_backendname_create_conf_t conf = ESP_LITTLEFS_BACKENDNAME_CREATE_CONFIG_DEFAULT();
+// set config here
+lfs_t * lfs;
+ESP_ERROR_CHECK(esp_littlefs_backendname_create(&lfs, &conf));
+// use lfs
+// destroy the lfs - for future compatibility always use the correct function for the each backend
+ESP_ERROR_CHECK(esp_littlefs_backendname_delete(&lfs));
+```
+
+# Builtin backends
+
+This fork supports multiple backends.
+* RAM backend untested
+
+    name: ram
+* FLASH backend tested
+
+    name: flash
+* SDCARD backend untested
+
+    name: sd
+* CUSTOM backend
+
+# Custom backend
+
+A custom backend can be built on top of esp_littlefs_abs.h or just by manually creating a lfs_t.
+
+# mount into vfs
+
+```c
+lfs_t * lfs;
+// init lfs with a backend here
+esp_littlefs_vfs_mount_conf_t conf = ESP_LITTLEFS_VFS_MOUNT_CONFIG_DEFAULT();
+conf.lfs = lfs;
+// set config here
+ESP_ERROR_CHECK(esp_littlefs_vfs_mount(&conf));
+// use lfs over vfs
+// unmount from vfs
+ESP_ERROR_CHECK(esp_littlefs_vfs_unmount(lfs));
+// destroy the lfs with the correct method for the used backend
+```
+
+# Performance - Test data may not reflect this forks performance
 
 Here are some naive benchmarks to give a vague indicator on performance.
 
-Formatting a ~512KB partition:
+Formatting a ~512KB partition: (This test is currently broken)
 
 ```
 FAT:         963,766 us
@@ -92,7 +131,7 @@ LittleFS***:  5,734,811 us
 ```
 
 In the above test, SPIFFS drastically slows down as the filesystem fills up. Below
-is the specific breakdown of file write times for SPIFFS. Not sure what happens 
+is the specific breakdown of file write times for SPIFFS. Not sure what happens
 on the last file write.
 
 
@@ -133,9 +172,7 @@ LittleFS***:  20,063 us
 
 # Tips, Tricks, and Gotchas
 
-* LittleFS operates on blocks, and blocks have a size of 4096 bytes on the ESP32.
-
-* A freshly formatted LittleFS will have 2 blocks in use, making it seem like 8KB are in use.
+* A freshly formatted LittleFS will have 2 blocks in use, making it seem like 2*block_size are in use.
 
 # Running Unit Tests
 
@@ -143,10 +180,10 @@ To flash the unit-tester app and the unit-tests, clone or symbolicly link this
 component to `$IDF_PATH/tools/unit-test-app/components/littlefs`. Make sure the
 folder name is `littlefs`, not `esp_littlefs`. Then, run the following:
 
-```
-cd $IDF_PATH/tools/unit-test-app
-idf.py menuconfig  # See notes
-idf.py -T littlefs -p YOUR_PORT_HERE flash monitor
+``` sh
+cd $ENV{IDF_PATH}/tools/unit-test-app
+idf.py -D EXTRA_COMPONENT_DIRS=path\to\folder\that\contains\esp_littlefs\folder -T esp_littlefs menuconfig // change partition table to the partition_table_unit_test_app.csv from this project
+idf.py -D EXTRA_COMPONENT_DIRS=path\to\folder\that\contains\esp_littlefs\folder -T esp_littlefs flash monitor
 ```
 
 In `menuconfig`:
@@ -176,4 +213,5 @@ idf.py -T littlefs -p YOUR_PORT_HERE encrypted-flash monitor
 
 # Acknowledgement
 
+This code was heavily modeled after the original repo 😉.
 This code base was heavily modeled after the SPIFFS esp-idf component.
