@@ -29,6 +29,10 @@ The library can be configured via `idf.py menuconfig` under `Component config->L
 User @wreyford has kindly provided a [demo repo](https://github.com/wreyford/demo_esp_littlefs) showing the use of `esp_littlefs`. A modified copy exists in the `example/` directory.
 
 
+### Example
+User @wreyford has kindly provided a demo repo showing the use of `esp_littlefs`:
+https://github.com/wreyford/demo_esp_littlefs
+
 # Documentation
 
 See the official [ESP-IDF SPIFFS documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/spiffs.html), basically all the functionality is the
