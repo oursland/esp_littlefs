@@ -30,8 +30,8 @@ User @wreyford has kindly provided a [demo repo](https://github.com/wreyford/dem
 
 
 ### Example
-User @wreyford has kindly provided a demo repo showing the use of `esp_littlefs`:
-https://github.com/wreyford/demo_esp_littlefs
+User @wreyford has kindly provided a [demo repo](https://github.com/wreyford/demo_esp_littlefs) showing the use of `esp_littlefs`. A modified copy exists in the `example/` directory.
+
 
 # Documentation
 
@@ -82,13 +82,13 @@ ESP_ERROR_CHECK(esp_littlefs_backendname_delete(&lfs));
 This fork supports multiple backends.
 * RAM backend untested
 
-    name: ram
+  name: ram
 * FLASH backend tested
 
-    name: flash
+  name: flash
 * SDCARD backend untested
 
-    name: sd
+  name: sd
 * CUSTOM backend
 
 # Custom backend
@@ -108,6 +108,40 @@ ESP_ERROR_CHECK(esp_littlefs_vfs_mount(&conf));
 // unmount from vfs
 ESP_ERROR_CHECK(esp_littlefs_vfs_unmount(lfs));
 // destroy the lfs with the correct method for the used backend
+```
+
+See the official [ESP-IDF SPIFFS documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/spiffs.html), basically all the functionality is the
+same; just replace `spiffs` with `littlefs` in all function calls.
+
+Also see the comments in `include/esp_littlefs.h`
+
+Slight differences between this configuration and SPIFFS's configuration is in the `esp_vfs_littlefs_conf_t`:
+
+1. `max_files` field doesn't exist since we removed the file limit, thanks to @X-Ryl669
+2. `partition_label` is not allowed to be `NULL`. You must specify the partition name from your partition table. This is because there isn't a define `littlefs` partition subtype in `esp-idf`. The subtype doesn't matter.
+
+### Filesystem Image Creation
+
+At compile time, a filesystem image can be created and flashed to the device by adding the following to your project's `CMakeLists.txt` file:
+
+```
+littlefs_create_partition_image(partition_name path_to_folder_containing_files)
+```
+
+For example, if your partition table looks like:
+
+```
+# Name,   Type, SubType,  Offset,  Size, Flags
+nvs,      data, nvs,      0x9000,  0x6000,
+phy_init, data, phy,      0xf000,  0x1000,
+factory,  app,  factory,  0x10000, 1M,
+graphics,  data, spiffs,         ,  0xF0000,
+```
+
+and your project has a folder called `device_graphics`, your call should be:
+
+```
+littlefs_create_partition_image(graphics device_graphics)
 ```
 
 # Performance - Test data may not reflect this forks performance

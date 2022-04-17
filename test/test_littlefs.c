@@ -267,6 +267,8 @@ TEST_CASE("truncate", "[littlefs]")
     TEST_ASSERT_EQUAL(0, fclose(f));
     TEST_ASSERT_EQUAL_STRING_LEN("012", buf, 8);
 
+
+    TEST_ASSERT_EQUAL(0, fclose(f));
     test_teardown();
 }
 
